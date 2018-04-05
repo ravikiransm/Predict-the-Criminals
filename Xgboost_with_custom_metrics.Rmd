@@ -1,6 +1,6 @@
 ---
 title: "xgboost"
-author: "Rvikiran"
+author: "Ravikiran"
 date: "December 22, 2017"
 output: html_document
 ---
