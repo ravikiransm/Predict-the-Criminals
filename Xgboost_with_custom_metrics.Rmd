@@ -1,6 +1,6 @@
 ---
 title: "xgboost"
-author: "soumya H"
+author: "Rvikiran"
 date: "December 22, 2017"
 output: html_document
 ---
@@ -8,10 +8,9 @@ output: html_document
 ### Clear the environment, Set the working directory and read the data into R Session
 ```{r}
 rm(list=ls(all=T))
-setwd("C:\\Users\\Manjunath Purma\\Downloads\\hacker earth\\d17428d0-e-Criminal")
-#setwd("C:\\Users\\rkarupas.ORADEV\\Desktop\\insofe data\\Insofe\\CUTe on Machine Learning")
+)
 data=read.csv("criminal_train.csv")
-data2=read.csv("dep.csv")
+
 
 ```
 ##  Exploratory Data Analysis
