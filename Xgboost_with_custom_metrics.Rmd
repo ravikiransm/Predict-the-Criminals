@@ -1,0 +1,279 @@
+---
+title: "xgboost"
+author: "soumya H"
+date: "December 22, 2017"
+output: html_document
+---
+
+### Clear the environment, Set the working directory and read the data into R Session
+```{r}
+rm(list=ls(all=T))
+setwd("C:\\Users\\Manjunath Purma\\Downloads\\hacker earth\\d17428d0-e-Criminal")
+#setwd("C:\\Users\\rkarupas.ORADEV\\Desktop\\insofe data\\Insofe\\CUTe on Machine Learning")
+data=read.csv("criminal_train.csv")
+data2=read.csv("dep.csv")
+
+```
+##  Exploratory Data Analysis
+
+* use str() to know the structure of the datasets
+```{r}
+View(data)
+
+```
+* The dataframe has 36553 observations of  66 variables
+
+* Use summary() for the data description
+
+```{r}
+str(data)
+```
+
+```{r}
+
+```
+
+* Use head() function to have a look at the datasets
+```{r}
+head(data)
+```
+
+### Data Pre-processing
+
+
+* Converting the target column to factor
+```{r}
+data$Criminal=as.factor(as.character(data$Criminal)) 
+#str(data2$X0.000000000000000000e.00)
+```
+
+* Checking for misiing values
+```{r}
+nas=sum(is.na(data))
+print(paste0("Total num of Na's: ",nas))
+```
+
+
+```{r,fig.height=50,fig.width=70}
+library(caret)
+library(corrplot)
+x=cor(data[,!(names(data) %in% "Criminal")])
+corrplot(x,method = "pie")
+#findCorrelation(x,names=T,cutoff = 0.9)
+#y=data[,!(names(data)%in% c("HLCNOTYR", "IIOTHHLT", "GRPHLTIN", "IRINSUR4", "IROTHHLT", "IIINSUR4" ,"PRVHLTIN","IICHMPUS" ,"IIMEDICR", "IIMCDCHP", "HLNVREF",  "HLNVOFFR", "HLNVNEED", "HLNVCOST","IIWELMOS", "TOOLONG",  "HLCALL99" ,"AIIND102"))]
+```
+
+
+
+
+
+### Train-Test split
+* The data is split using createDatapartion from caret package    
+```{r}
+library(caret)
+set.seed(123)
+train_rows=createDataPartition(data$Criminal,p=0.82,list = F)
+traindata=data[train_rows,]
+testdata=data[-train_rows,]
+
+```
+
+
+```{r}
+library(DMwR)
+traindata <- SMOTE(Criminal ~ .,traindata ,perc.over = 200,perc.under=300)
+traindata=newData
+table(traindata$Criminal)
+
+table(data$Criminal)
+boxplot(data)
+#write.csv(traindata,"strain.csv")
+#write.csv(newData,"smote.csv")
+#install.packages("data.table")
+library(data.table)
+```
+
+
+* Standardize all the variables in the dataset     
+```{r}
+std_data=preProcess(data[,!(names(data)%in% "Criminal")],method = c("center","scale"))
+train_data=predict(std_data,data)
+test_data=predict(std_data,testdata)
+write.csv(train_data,"train_auto.csv")
+write.csv(test_data,"test_auto.csv")
+train_data$Criminal
+```
+
+
+* Convert data into an object of the class "xgb.Dmatrix"in order to work with the xgboost model   
+```{r}
+library(xgboost)
+train_xgb=xgb.DMatrix(data=as.matrix(train_data[,!(names(train_data) %in% "Criminal")]),
+                   label=as.matrix(train_data[,names(train_data)%in%"Criminal"]))
+
+test_xgb=xgb.DMatrix(data=as.matrix(test_data[,!(names(test_data) %in% "Criminal")]),
+                   label=as.matrix(test_data[,names(test_data) %in% "Criminal"]))
+
+```
+
+
+custom1
+
+```{r}
+xgb.max_mcc <- function(pred,train_xgb) {
+  
+  y_true <- getinfo(train_xgb, "label")
+  
+  DT <- data.table(y_true = y_true, y_prob = pred, key = "y_prob")
+  cleaner <- !duplicated(DT[, "y_prob"], fromLast = TRUE)
+  nump <- sum(y_true)
+  numn <- length(y_true) - nump
+  
+  DT[, tn_v := as.numeric(cumsum(y_true == 0))]
+  DT[, fp_v := cumsum(y_true == 1)]
+  DT[, fn_v := numn - tn_v]
+  DT[, tp_v := nump - fp_v]
+  DT <- DT[cleaner, ]
+  DT[, mcc := (tp_v * tn_v - fp_v * fn_v) / sqrt((tp_v + fp_v) * (tp_v + fn_v) * (tn_v + fp_v) * (tn_v + fn_v))]
+  
+  best_row <- which.max(DT$mcc)
+  
+  if (length(best_row) > 0) {
+    return(list(metric = "mcc", value = DT$mcc[best_row[1]]))
+  } else {
+    return(list(metric = "mcc", value = -1))
+  }
+  
+}
+```
+
+custom 2
+```{r}
+xgb.max_kappa <- function(pred, train_xgb) {
+  
+  y_true <- getinfo(train_xgb, "label")
+  
+  DT <- data.table(y_true = y_true, y_prob = pred, key = "y_prob")
+  cleaner <- !duplicated(DT[, "y_prob"], fromLast = TRUE)
+  nump <- sum(y_true)
+  counter <- length(y_true)
+  numn <- counter - nump
+  
+  DT[, tn_v := as.numeric(cumsum(y_true == 0))]
+  DT[, fp_v := cumsum(y_true == 1)]
+  DT[, fn_v := numn - tn_v]
+  DT[, tp_v := nump - fp_v]
+  DT <- DT[cleaner, ]
+  DT <- DT[, pObs := (tp_v + tn_v) / counter]
+  DT <- DT[, pExp := (((tp_v + fn_v) * (tp_v + fp_v)) + ((fp_v + tn_v) * (fn_v + tn_v))) / (counter * counter)]
+  DT <- DT[, kappa := (pObs - pExp) / (1 - pExp)]
+  
+  best_row <- which.max(DT$kappa)
+  
+  if (length(best_row) > 0) {
+    return(list(metric = "kappa", value = DT$kappa[best_row[1]]))
+  } else {
+    return(list(metric = "kappa", value = -1))
+  }
+  
+}
+```
+
+### Building XGB with parameters
+
+```{r}
+set.seed(123)
+params_list=list("objective"="binary:logistic","eta"=0.001,"max_depth" = 4,"gamma" = 0,"colsample_bytree" = 0.2,"subsample" = 1.0,"silent" = 1,'eval_metric'='auc')
+
+xgb_model_params=xgb.cv(data =train_xgb,params = params_list,nrounds = 1000,early_stopping_rounds = 50,nfold = 5 ,maximize = T) 
+#xgb.max_mcc(xgb_params_pred, train_xgb)
+```
+
+```{r}
+
+
+nround = 1
+md <- xgb.train(data=train_xgb, params=params_list, nrounds=nround, nthread=6)
+
+xgb_params_pred=predict(md,test_xgb)
+```
+
+
+```{r} 
+
+params_xgb=ifelse(xgb_params_pred<0.5,0,1)
+
+
+confusionMatrix(params_xgb,test_data$Criminal)
+
+test_new<-read.csv("criminal_test.csv") 
+
+```
+
+```{r}
+test=test[,!(names(test)%in% c("HLCNOTYR", "IIOTHHLT", "GRPHLTIN", "IRINSUR4", "IROTHHLT", "IIINSUR4" ,"PRVHLTIN","IICHMPUS" ,"IIMEDICR", "IIMCDCHP", "HLNVREF",  "HLNVOFFR", "HLNVNEED", "HLNVCOST","IIWELMOS", "TOOLONG",  "HLCALL99" ,"AIIND102"))]
+```
+
+```{r}
+test=predict(std_data,test_new)
+test=xgb.DMatrix(data=as.matrix(test))
+xgb_params_pred=predict(md,test)
+params_test=ifelse(xgb_params_pred<0.5,0,1)
+write.csv(params_test,"wat2.csv")
+library(h2o)
+```
+
+
+
+### variable importance
+```{r fig.height=20,fig.width=12}
+variable_importance_matrix=xgb.importance(feature_names = colnames(train_xgb),model=xgb_model_params)
+xgb.plot.importance(variable_importance_matrix)
+
+```
+
+```{r}
+library(devtools)
+options(devtools.install.args = "--no-multiarch") # if you have 64-bit R only, you can skip this
+install_github("Microsoft/LightGBM", subdir = "R-package")
+```
+
+
+```{r}
+install.packages('lightgbm', dependencies=TRUE, repos='http://cran.rstudio.com/')
+install.packages("LightGBM")
+library(lightgbm)
+
+```
+
+
+```{r}
+dtrain = lgb.Dataset(data = as.matrix(train_data[,-c('Criminal')]),label = train_data$Criminal)
+
+bst11 <- lightgbm(data = dtrain,
+                  max_depth = 8,
+                  learning_rate = 0.2,
+                  nrounds = 70,
+                  objective = "binary",
+                  metric = "auc"
+)
+
+```
+
+```{r}
+x=read.csv("kag4.csv")
+
+```
+
+```{r}
+x
+params_test=ifelse(x$Criminal<0.5,0,1)
+table(params_test)
+```
+
+```{r}
+write.csv(params_test,"lgbm1.csv")
+```
+
+
+
